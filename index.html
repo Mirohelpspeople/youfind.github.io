@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>YouFind — Search Videos by Frame</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a24;
+    --border: #2a2a3a;
+    --accent: #e8ff47;
+    --accent2: #7c3aed;
+    --text: #f0f0f8;
+    --muted: #6b6b88;
+    --red: #ff4747;
+    --green: #47ffb2;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Animated grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .glow-orb {
+    position: fixed;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124,58,237,0.12) 0%, transparent 70%);
+    top: -200px; left: -200px;
+    pointer-events: none;
+    z-index: 0;
+    animation: drift 8s ease-in-out infinite alternate;
+  }
+  .glow-orb2 {
+    position: fixed;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,255,71,0.07) 0%, transparent 70%);
+    bottom: -100px; right: -100px;
+    pointer-events: none;
+    z-index: 0;
+    animation: drift2 10s ease-in-out infinite alternate;
+  }
+  @keyframes drift { to { transform: translate(80px, 60px); } }
+  @keyframes drift2 { to { transform: translate(-60px, -40px); } }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 60px 24px 120px;
+  }
+
+  /* Header */
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    margin-bottom: 56px;
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: clamp(2rem, 6vw, 3.4rem);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    color: var(--text);
+  }
+  .logo span {
+    color: var(--accent);
+  }
+  .tagline {
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  /* Upload zone */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 48px 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--surface);
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(232,255,71,0.03);
+  }
+  .upload-zone.has-image {
+    border-color: var(--accent2);
+    background: var(--surface2);
+    padding: 0;
+  }
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .upload-icon {
+    font-size: 3rem;
+    margin-bottom: 16px;
+    display: block;
+    opacity: 0.6;
+  }
+  .upload-label {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .upload-sub {
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  #preview-img {
+    width: 100%;
+    max-height: 340px;
+    object-fit: contain;
+    border-radius: 14px;
+    display: none;
+  }
+
+  /* Controls */
+  .controls {
+    margin-top: 20px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 28px;
+    cursor: pointer;
+    transition: transform 0.12s, opacity 0.12s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary {
+    background: var(--accent);
+    color: #0a0a0f;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { color: var(--text); border-color: var(--muted); }
+
+  /* Status bar */
+  .status-bar {
+    margin-top: 28px;
+    padding: 14px 20px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--muted);
+    display: none;
+    align-items: center;
+    gap: 12px;
+  }
+  .status-bar.visible { display: flex; }
+  .status-bar.loading { border-color: var(--accent2); }
+  .status-bar.done { border-color: var(--green); color: var(--green); }
+  .status-bar.error { border-color: var(--red); color: var(--red); }
+
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(124,58,237,0.3);
+    border-top-color: var(--accent2);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Analysis box */
+  .analysis-box {
+    margin-top: 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    display: none;
+  }
+  .analysis-box.visible { display: block; }
+  .analysis-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .analysis-text {
+    font-size: 0.8rem;
+    color: #b0b0cc;
+    line-height: 1.8;
+    white-space: pre-wrap;
+  }
+
+  /* Results */
+  .results-section {
+    margin-top: 40px;
+    display: none;
+  }
+  .results-section.visible { display: block; }
+
+  .results-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .results-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+  }
+  .results-count {
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--surface2);
+    padding: 4px 12px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .results-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .result-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    align-items: start;
+    transition: border-color 0.15s, background 0.15s;
+    animation: slideUp 0.3s ease both;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .result-card:hover {
+    border-color: var(--accent2);
+    background: var(--surface2);
+  }
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .result-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--border);
+    line-height: 1;
+    width: 28px;
+  }
+  .result-body {}
+  .result-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .result-url {
+    font-size: 0.68rem;
+    color: var(--accent2);
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+    word-break: break-all;
+  }
+  .result-desc {
+    font-size: 0.75rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .result-platform {
+    font-size: 0.62rem;
+    color: var(--muted);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 9px;
+    white-space: nowrap;
+    letter-spacing: 0.06em;
+    align-self: start;
+    text-transform: uppercase;
+  }
+  .result-platform.yt { border-color: #ff4747; color: #ff4747; }
+  .result-platform.vi { border-color: #1ab7ea; color: #1ab7ea; }
+  .result-platform.tw { border-color: #7c3aed; color: #7c3aed; }
+
+  /* Confidence bar */
+  .conf-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .conf-label { font-size: 0.62rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+  .conf-bar { flex: 1; height: 3px; background: var(--border); border-radius: 99px; }
+  .conf-fill { height: 100%; border-radius: 99px; background: var(--accent); transition: width 0.4s ease; }
+
+  /* Empty / error states */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+    font-size: 0.8rem;
+    display: none;
+  }
+  .empty-state.visible { display: block; }
+  .empty-state .emoji { font-size: 2.5rem; display: block; margin-bottom: 12px; }
+
+  /* Disclaimer */
+  .disclaimer {
+    margin-top: 60px;
+    font-size: 0.63rem;
+    color: var(--muted);
+    line-height: 1.7;
+    opacity: 0.6;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="glow-orb"></div>
+<div class="glow-orb2"></div>
+
+<div class="wrap">
+  <header>
+    <div class="logo">You<span>Find</span></div>
+    <div class="tagline">Video Search by Frame</div>
+  </header>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept="image/*" />
+    <span class="upload-icon" id="uploadIcon">🎞</span>
+    <span class="upload-label" id="uploadLabel">Drop a frame, screenshot or fotogram</span>
+    <span class="upload-sub" id="uploadSub">PNG · JPG · WEBP — any frame from a video you want to find</span>
+    <img id="preview-img" alt="Preview" />
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-primary" id="searchBtn" disabled>🔍 Search Videos</button>
+    <button class="btn btn-secondary" id="clearBtn" style="display:none">✕ Clear</button>
+  </div>
+
+  <!-- Status -->
+  <div class="status-bar" id="statusBar">
+    <div class="spinner" id="statusSpinner"></div>
+    <span id="statusText">Analyzing frame...</span>
+  </div>
+
+  <!-- Analysis -->
+  <div class="analysis-box" id="analysisBox">
+    <div class="analysis-title">Frame Analysis</div>
+    <div class="analysis-text" id="analysisText"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results-section" id="resultsSection">
+    <div class="results-header">
+      <div class="results-title">Video Results</div>
+      <div class="results-count" id="resultsCount">0 found</div>
+    </div>
+    <div class="results-grid" id="resultsGrid"></div>
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    <span class="emoji">🔭</span>
+    No videos found matching this frame.<br/>Try a cleaner screenshot or a more distinctive scene.
+  </div>
+
+  <div class="disclaimer">
+    YouFind uses AI vision to analyze your frame and searches the web for matching video content.<br/>
+    Results are AI-generated suggestions — always verify links before clicking.
+  </div>
+</div>
+
+<script>
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const uploadIcon = document.getElementById('uploadIcon');
+const uploadLabel = document.getElementById('uploadLabel');
+const uploadSub = document.getElementById('uploadSub');
+const previewImg = document.getElementById('preview-img');
+const searchBtn = document.getElementById('searchBtn');
+const clearBtn = document.getElementById('clearBtn');
+const statusBar = document.getElementById('statusBar');
+const statusSpinner = document.getElementById('statusSpinner');
+const statusText = document.getElementById('statusText');
+const analysisBox = document.getElementById('analysisBox');
+const analysisText = document.getElementById('analysisText');
+const resultsSection = document.getElementById('resultsSection');
+const resultsCount = document.getElementById('resultsCount');
+const resultsGrid = document.getElementById('resultsGrid');
+const emptyState = document.getElementById('emptyState');
+
+let currentBase64 = null;
+let currentMime = null;
+
+// Drag & drop
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith('image/')) loadFile(f);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) loadFile(fileInput.files[0]);
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const dataUrl = ev.target.result;
+    currentBase64 = dataUrl.split(',')[1];
+    currentMime = file.type;
+    previewImg.src = dataUrl;
+    previewImg.style.display = 'block';
+    uploadIcon.style.display = 'none';
+    uploadLabel.style.display = 'none';
+    uploadSub.style.display = 'none';
+    uploadZone.classList.add('has-image');
+    searchBtn.disabled = false;
+    clearBtn.style.display = '';
+    hideResults();
+  };
+  reader.readAsDataURL(file);
+}
+
+clearBtn.addEventListener('click', () => {
+  currentBase64 = null; currentMime = null;
+  previewImg.src = ''; previewImg.style.display = 'none';
+  uploadIcon.style.display = ''; uploadLabel.style.display = ''; uploadSub.style.display = '';
+  uploadZone.classList.remove('has-image');
+  searchBtn.disabled = true;
+  clearBtn.style.display = 'none';
+  fileInput.value = '';
+  hideResults();
+  setStatus('', '');
+});
+
+function hideResults() {
+  resultsSection.classList.remove('visible');
+  emptyState.classList.remove('visible');
+  analysisBox.classList.remove('visible');
+  statusBar.classList.remove('visible','loading','done','error');
+}
+
+function setStatus(msg, type) {
+  if (!msg) { statusBar.classList.remove('visible','loading','done','error'); return; }
+  statusBar.classList.add('visible');
+  statusBar.classList.remove('loading','done','error');
+  if (type) statusBar.classList.add(type);
+  statusText.textContent = msg;
+  statusSpinner.style.display = type === 'loading' ? '' : 'none';
+}
+
+searchBtn.addEventListener('click', async () => {
+  if (!currentBase64) return;
+  searchBtn.disabled = true;
+  hideResults();
+  analysisBox.classList.remove('visible');
+
+  try {
+    setStatus('Analyzing your frame with AI vision...', 'loading');
+
+    // Step 1: Analyze the image with Claude vision
+    const analysisResp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: `You are a video frame analysis expert. Analyze the given image frame and extract as much detail as possible to help find the original video online. Focus on:
+1. Scene description (what's happening, setting, mood)
+2. Visual elements (people, objects, text, logos, brands, UI elements)
+3. Style/genre clues (animation, live action, movie, tutorial, gameplay, music video, news, etc.)
+4. Time period / era indicators
+5. Any visible text, watermarks, channel names, subtitles
+6. Camera style, color grading, production quality
+7. Best search queries to find this video on YouTube, Vimeo or other platforms
+
+End your response with a section labeled SEARCH_QUERIES: containing 3-5 specific search queries (one per line) that would most likely find this video online.`,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: currentMime, data: currentBase64 } },
+            { type: 'text', text: 'Analyze this frame and help me find the original video online.' }
+          ]
+        }]
+      })
+    });
+
+    const analysisData = await analysisResp.json();
+    const analysisRaw = analysisData.content?.find(b => b.type === 'text')?.text || '';
+
+    // Show analysis
+    const displayAnalysis = analysisRaw.replace(/SEARCH_QUERIES:[\s\S]*$/, '').trim();
+    analysisText.textContent = displayAnalysis;
+    analysisBox.classList.add('visible');
+
+    // Extract search queries
+    const sqMatch = analysisRaw.match(/SEARCH_QUERIES:([\s\S]*?)$/i);
+    let queries = [];
+    if (sqMatch) {
+      queries = sqMatch[1].trim().split('\n').map(q => q.replace(/^[-•*\d.]\s*/, '').trim()).filter(Boolean).slice(0, 5);
+    }
+    if (queries.length === 0) queries = [displayAnalysis.split('.')[0]];
+
+    setStatus(`Searching the web for: "${queries[0]}"...`, 'loading');
+
+    // Step 2: Search the web using Claude with web_search tool
+    const searchResp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        system: `You are a video search assistant. The user has uploaded a video frame and wants to find the original video online.
+Search for the video using the provided queries and return results as a JSON array ONLY. No other text.
+Each result must have: { "title": string, "url": string, "description": string, "platform": string, "confidence": number (0-100) }
+Platform must be one of: "YouTube", "Vimeo", "Twitter/X", "TikTok", "Instagram", "Twitch", "Reddit", "Other"
+Return 3-6 results sorted by confidence. Return ONLY valid JSON, no markdown, no explanation.`,
+        messages: [{
+          role: 'user',
+          content: `The frame analysis says: ${displayAnalysis}\n\nSearch queries to try: ${queries.join(' | ')}\n\nSearch for these videos and return JSON results array.`
+        }]
+      })
+    });
+
+    const searchData = await searchResp.json();
+    const allText = (searchData.content || [])
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let results = [];
+    try {
+      const jsonMatch = allText.match(/\[[\s\S]*\]/);
+      if (jsonMatch) results = JSON.parse(jsonMatch[0]);
+    } catch(e) {
+      console.error('Parse error', e, allText);
+    }
+
+    setStatus(`Found ${results.length} video results`, 'done');
+    renderResults(results, queries[0]);
+
+  } catch(err) {
+    console.error(err);
+    setStatus('Something went wrong. Please try again.', 'error');
+  } finally {
+    searchBtn.disabled = false;
+  }
+});
+
+function platformClass(p) {
+  if (!p) return '';
+  const l = p.toLowerCase();
+  if (l.includes('youtube')) return 'yt';
+  if (l.includes('vimeo')) return 'vi';
+  if (l.includes('twitch') || l.includes('twitter') || l.includes('tiktok')) return 'tw';
+  return '';
+}
+
+function renderResults(results, query) {
+  resultsGrid.innerHTML = '';
+  if (!results || results.length === 0) {
+    emptyState.classList.add('visible');
+    return;
+  }
+
+  resultsSection.classList.add('visible');
+  resultsCount.textContent = `${results.length} found`;
+
+  results.forEach((r, i) => {
+    const card = document.createElement('a');
+    card.className = 'result-card';
+    card.href = r.url || '#';
+    card.target = '_blank';
+    card.rel = 'noopener noreferrer';
+    card.style.animationDelay = `${i * 0.07}s`;
+
+    const conf = Math.min(100, Math.max(0, r.confidence || 50));
+    const platCls = platformClass(r.platform);
+
+    card.innerHTML = `
+      <div class="result-num">${String(i+1).padStart(2,'0')}</div>
+      <div class="result-body">
+        <div class="result-title">${escHtml(r.title || 'Unknown title')}</div>
+        <div class="result-url">${escHtml(r.url || '')}</div>
+        <div class="result-desc">${escHtml(r.description || '')}</div>
+        <div class="conf-row">
+          <span class="conf-label">Match</span>
+          <div class="conf-bar"><div class="conf-fill" style="width:${conf}%"></div></div>
+          <span class="conf-label">${conf}%</span>
+        </div>
+      </div>
+      <div class="result-platform ${platCls}">${escHtml(r.platform || 'Web')}</div>
+    `;
+    resultsGrid.appendChild(card);
+  });
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
